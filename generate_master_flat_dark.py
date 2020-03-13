@@ -1,9 +1,14 @@
+import os
+import platform
 import sys
 from pathlib import Path
 import numpy as np
 import imageio
 import skimage.color
 import sunpy.io.fits
+import matplotlib.pyplot as plt
+import datetime
+import traceback
 
 
 BITFACTOR = 255
@@ -73,7 +78,31 @@ def remove_spectral_line(
 
     coef = np.polyfit(xvalues, shift_vertical, 1)
 
+    shifts = coef[0] * xvalues + coef[1]
 
+    plt.plot(shift_vertical)
+
+    plt.plot(shifts)
+
+    plt.show()
+
+    shift_corrected_flat = master_flat.copy()
+
+    for j in range(master_flat.shape[0]):
+        profile = master_flat[j, :]
+        shifted_profile = fshft(profile, shifts[j])
+        shift_corrected_flat[j, :] = shifted_profile
+
+    reference_profile_corrected = shift_corrected_flat[reference_row, :]
+
+    resultant_flat = master_flat.copy()
+
+    for j in range(master_flat.shape[0]):
+        resultant_flat[j, :] = shift_corrected_flat[j, :] / \
+            reference_profile_corrected
+        resultant_flat[j, :] = fshft(shift_corrected_flat[j, :], -shifts[j])
+
+    return resultant_flat
 
 
 def create_dark_master(dark_files):
@@ -166,13 +195,13 @@ def generate_master_flat(
 
     master_flat = create_flat_master(flat_files, master_dark_path)
 
-    shift_corrected_flat, shifts = remove_spectral_line(master_flat)
+    line_removed_flat = remove_spectral_line(master_flat)
 
     write_path = path_to_write_directory / master_flat_filename
 
     sunpy.io.fits.write(
         write_path,
-        shift_corrected_flat,
+        line_removed_flat,
         dict()
     )
 
